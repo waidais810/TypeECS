@@ -308,19 +308,27 @@ class EventProxy<T> implements IEventReader<T>, IEventWriter<T> {
         this.world.DirtyEvent(this);
     }
 
+    private RefreshSystem(){
+        this.bindReaderSystem.forEach(s=>{
+            s.NeedRefresh = true;
+        });
+    }
+
     //将写入的事件转移到读取事件中，同时清空写入事件，当存在新事件时会通知绑定的系统
     Flush(){
         [this.events, this.readEvents] = [this.readEvents, this.events];
         this.events.length = 0;
         if(this.readEvents.length > 0){
-            this.bindReaderSystem.forEach(s=>{
-                s.NeedRefresh = true;
-            });
+            this.RefreshSystem();
         }
     }
 
     ClearReadEvents(){
+        const needRefresh = this.readEvents.length > 0;
         this.readEvents.length = 0;
+        if(needRefresh){
+            this.RefreshSystem();
+        }
     }
 }
 
@@ -532,13 +540,6 @@ export class World{
         plugin.forEach(p=>{
             this.plugins.push(p);
             p.Build(this);
-        });
-        return this;
-    }
-
-    public Build(){
-        this.plugins.forEach(plugin=>{
-            plugin.Build(this);
         });
         return this;
     }

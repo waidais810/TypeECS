@@ -24,7 +24,7 @@ export class EntityComponent {
     }
 
     gets<T extends Constructor[]>(...ctors:T): { [K in keyof T]: T[K] extends Constructor<infer U> ? U|undefined : never } {
-        return ctors.map(ctor => new ctor()) as any;
+        return ctors.map(ctor => this.get(ctor)) as any;
     }
 
     has<T>(query: new () => T): boolean {

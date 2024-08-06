@@ -1,91 +1,103 @@
 import {World, IPlugin, SystemType, query, system, Commands, IEventWriter, IEventReader, Resource, EntityComponent, BindWithOriginal } from "./index"
 const {CommandQuery, EntityQuery, EventWriterQuery, ResourceQuery, EventReaderQuery, WorldQuery} = query;
 
-class ComponentA{}
-
-class ComponentB{}
-
-class ComponentC{}
-
-class ResourceA{
-    constructor(public resource:string){}
+class Position {
+    constructor(public x: number, public y: number) {}
 }
 
-class EventA{
-    constructor(public v:number){}
+class Velocity {
+    constructor(public dx: number, public dy: number) {}
 }
 
-class DespawnEvent{
-    constructor(public entity:EntityComponent){}
+class Renderable {
+    constructor(public sprite: string) {}
 }
 
-class Test2Plugin implements IPlugin{
+class Collider {
+    constructor(public radius: number) {}
+}
+
+class Score {
+    constructor(public value: number) {}
+}
+
+class GameConfig {
+    constructor(public width: number, public height: number) {}
+}
+
+class CollisionEvent {
+    constructor(public entityA: EntityComponent, public entityB: EntityComponent) {}
+}
+
+class GamePlugin implements IPlugin {
     Build(world: World): void {
-        world.AddSystems(SystemType.StartUp, BindWithOriginal(this.StartUpSystem, this));
+        world.RegistEvent(CollisionEvent)
+            .AddSystems(SystemType.StartUp, GamePlugin.StartUpSystem)
+            .AddSystems(SystemType.Update, GamePlugin.MovementSystem, GamePlugin.CollisionSystem, GamePlugin.OnCollision)
+            .AddSystems(SystemType.LateUpdate, GamePlugin.RenderSystem);
     }
 
     @system(CommandQuery)
-    StartUpSystem(commands:Commands){
-        commands.spawn(new ComponentA(), new ComponentC());
-        commands.resource(new ResourceA("hahaha"))
-    }
-}
-
-class TestPlugin implements IPlugin{
-    Build(world: World): void {
-        world.RegistEvent(EventA)
-            .RegistEvent(DespawnEvent)
-            .AddSystems(SystemType.StartUp, TestPlugin.StartUpSystem)
-            .AddSystems(SystemType.Update, TestPlugin.TestEventSystem, TestPlugin.TestEventSystem2)
-            .AddSystems(SystemType.LateUpdate, TestPlugin.TestSystem, TestPlugin.DespawnSystem)
-            .AddPlugin(new Test2Plugin());
+    static StartUpSystem(commands: Commands) {
+        commands.spawn(new Position(0, 0), new Velocity(1, 1), new Renderable('player.png'), new Collider(10));
+        commands.spawn(new Position(100, 100), new Renderable('enemy.png'), new Collider(10));
+        commands.resource(new GameConfig(800, 600));
+        commands.resource(new Score(0));
     }
 
-    @system(CommandQuery, EventWriterQuery(EventA))
-    static StartUpSystem(commands:Commands, eventWriter:IEventWriter<EventA>){
-        commands.spawn(new ComponentA(), new ComponentC());
-        commands.resource(new ResourceA("hahaha"))
-    }
-
-    @system(EntityQuery(ComponentA, ComponentC).Without(ComponentB), ResourceQuery(ResourceA).Nullable(true), EntityQuery(ComponentC))
-    static TestSystem(entities:EntityComponent[], resource:Resource<ResourceA>, entities2:EntityComponent[]){
-        entities.forEach(entity=>{
-            const [comA, comC] = entity.gets(ComponentA, ComponentC);
-            console.log(comA, comC, resource);
-        })
-    }
-
-    @system(EventWriterQuery(EventA), WorldQuery)
-    static TestEventSystem(eventReader:IEventWriter<EventA>, world:World){
-        eventReader.Write(new EventA(world.Frame));  
-    }
-
-    @system(EventReaderQuery(EventA), CommandQuery, EntityQuery(ComponentA), EventWriterQuery(DespawnEvent))
-    static TestEventSystem2(eventReader:IEventReader<EventA>, commands:Commands, entities:EntityComponent[], eventWriter:IEventWriter<DespawnEvent>){
-        const events = eventReader.Read();
-        const event = events[0]?.v ?? 0;
-        console.log(event);
-        commands.resource(new ResourceA(event.toString()));
-        if(event >= 100){
-            entities.forEach(entity=>{
-                eventWriter.Write(new DespawnEvent(entity));
-                commands.despawn(entity);
-            });
-        }
-    }
-
-    @system(EventReaderQuery(DespawnEvent))
-    static DespawnSystem(eventReader:IEventReader<DespawnEvent>){
-        const events = eventReader.Read();
-        events.forEach(event=>{
-            console.log("Despawn", event.entity.entityID);
+    @system(EntityQuery(Position, Velocity))
+    static MovementSystem(entities: EntityComponent[]) {
+        entities.forEach(entity => {
+            const [position, velocity] = entity.gets(Position, Velocity);
+            if(position && velocity) {
+                position.x += velocity.dx;
+                position.y += velocity.dy;
+            }
         });
     }
 
+    @system(EntityQuery(Position, Collider), EventWriterQuery(CollisionEvent))
+    static CollisionSystem(entities: EntityComponent[], eventWriter: IEventWriter<CollisionEvent>) {
+        for (let i = 0; i < entities.length; i++) {
+            for (let j = i + 1; j < entities.length; j++) {
+                const [posA, colA] = entities[i].gets(Position, Collider);
+                const [posB, colB] = entities[j].gets(Position, Collider);
+                if(posA && posB && colA && colB) {
+                    const dx = posA.x - posB.x;
+                    const dy = posA.y - posB.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < colA.radius + colB.radius) {
+                        eventWriter.Write(new CollisionEvent(entities[i], entities[j]));
+                    }
+                }
+            }
+        }
+    }
+
+    @system(EventReaderQuery(CollisionEvent), CommandQuery)
+    static OnCollision(event:IEventReader<CollisionEvent>, commands:Commands){
+        for(const collision of event.Read()){
+            console.log(`Collision between entity ${collision.entityA.entityID} and entity ${collision.entityB.entityID}`);
+            commands.despawn(collision.entityA);
+            commands.despawn(collision.entityB);
+        }
+    }
+
+    @system(EntityQuery(Position, Renderable))
+    static RenderSystem(entities: EntityComponent[]) {
+        entities.forEach(entity => {
+            const [position, renderable] = entity.gets(Position, Renderable);
+            if(position && renderable)
+                console.log(`Rendering ${renderable.sprite} at (${position.x}, ${position.y})`);
+        });
+    }
 }
 
-const world = new World(new TestPlugin());
+//这里将会打印两次碰状事件，因为事件的更新是延后一帧的，所以在第一帧碰撞事件发生后，第二帧才会执行碰撞事件的处理，而第二帧又发生了碰撞事件，所以会打印两次
+//如果需要在碰撞事件发生后立即处理，可以将碰撞事件的处理放在碰撞事件的系统中，而不是放在碰撞事件的系统中
+const world = new World(new GamePlugin());
 world.StartUp();
 while(true){
     world.UpdatePerFrame();
 }
+
