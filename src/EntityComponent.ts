@@ -2,6 +2,16 @@ import { Constructor } from "./Types";
 
 export class EntityComponent {
     private map = new Map<Constructor, any>();
+    private _isVaild = true;
+    
+    public get isVaild() {
+        return this._isVaild;
+    }
+
+    destroy() {
+        this._isVaild = false;
+    }
+
     constructor(public entityID: number, components?:any[]) {
         components?.forEach(component => this.set(component));
     }

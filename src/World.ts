@@ -417,6 +417,7 @@ export class World{
                     this._doSystemUpdate(system=>{
                         system.RemoveEntity(change.entity);
                     });
+                    change.entity.destroy();
                     break;
                 case ChangeType.Change:
                     switch(change.extra?.type){
