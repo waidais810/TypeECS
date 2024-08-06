@@ -2,7 +2,7 @@ import { CommandQuery, Commands } from "./Commands";
 import { SystemRegistry } from "./decorator";
 import { EntityComponent } from "./EntityComponent";
 import { EntityQueryProxy } from "./EntityQuery";
-import { EventReader, EventReaderQueryInfo, EventWriter, EventWriterQueryInfo } from "./Event";
+import { IEventReader, EventReaderQueryInfo, IEventWriter, EventWriterQueryInfo } from "./Event";
 import { IQuery } from "./IQuery";
 import { IPlugin } from "./Plugin";
 import { ResourceQueryInfo } from "./Resource";
@@ -111,39 +111,37 @@ class CommandPack implements IQueryResult {
 }
 
 class EventReaderPack implements IQueryResult {
-    public bindWriter:EventWriter<any>;
-    private eventReader:EventReader<any>;
+    public eventProxy:EventProxy<any>;
     public constructor(eventReader:EventReaderQueryInfo, private world:World){
-        const writer = this.world.events.get(eventReader.event);
-        if(writer == undefined)
-            throw new Error('EventWriter not found');
-        this.bindWriter = writer;
-        this.eventReader = new EventReader(writer);
+        const proxy = this.world.events.get(eventReader.event);
+        if(proxy == undefined)
+            throw new Error('EventProxy not found');
+        this.eventProxy = proxy;
     }
 
     public OnEventChange():boolean{
         return true;
     }
 
-    get value(): any {
-        return this.eventReader;
+    get value() {
+        return this.eventProxy;
     }
     
     get IsValid(): boolean {
-        return this.eventReader.Events.length > 0;
+        return this.eventProxy.RdLength > 0;
     }
 }
 
 class EventWriterPack implements IQueryResult {
-    private eventWriter:EventWriter<any>;
+    private eventProxy:EventProxy<any>;
     public constructor(eventWriter:EventWriterQueryInfo, private world:World){
-        const writer = this.world.events.get(eventWriter.writer);
-        if(writer == undefined)
+        const proxy = this.world.events.get(eventWriter.writer);
+        if(proxy == undefined)
             throw new Error('EventWriter not found');
-        this.eventWriter = writer;
+        this.eventProxy = proxy;
     }
     get value(): any {
-        return this.eventWriter;
+        return this.eventProxy;
     }
     get IsValid(): boolean {
         return true;
@@ -154,10 +152,9 @@ class SystemPack {
     private queryPacks:IQueryResult[] = [];
     private entityPack:EntityQueryPack[] = [];
     private resourcePack:ResourceQueryPack[] = [];
-    private eventReaderPack:Map<EventWriter<any>,EventReaderPack> = new Map();
     private args:any[] = [];
     private IsValid:boolean = false;
-    private NeedRefresh:boolean = true;
+    public NeedRefresh:boolean = true;
     public constructor (private system:System, queries:IQuery[], private world:World){
         for(const query of queries){
             if(query instanceof EntityQueryProxy){
@@ -176,8 +173,8 @@ class SystemPack {
             }
             else if(query instanceof EventReaderQueryInfo){
                 const pack = new EventReaderPack(query, this.world);
+                pack.eventProxy.BindReadSystem(this);
                 this.queryPacks.push(pack);
-                this.eventReaderPack.set(pack.bindWriter, pack);
             }
             else if(query === CommandQuery){
                 const pack = new CommandPack(this.world);
@@ -202,15 +199,6 @@ class SystemPack {
             }
         }
         this.IsValid = true;
-    }
-
-    public OnEventChange(event:EventWriter<any>){
-        const pack = this.eventReaderPack.get(event);
-        if(pack){
-            if(pack.OnEventChange()){
-                this.NeedRefresh = true;
-            }
-        }
     }
 
     public NewEntity(entity:EntityComponent){
@@ -253,11 +241,6 @@ class SystemPack {
             this.NeedRefresh = true;
     }
 
-    public ClearEvent(writer:EventWriter<any>){
-        if(this.eventReaderPack.has(writer))
-            this.NeedRefresh = true;
-    }
-
     public Execute(){
         if(this.NeedRefresh){
             this.RefreshArgs();
@@ -291,6 +274,56 @@ type ResourceChange = {
     extra?:any
 }
 
+class EventProxy<T> implements IEventReader<T>, IEventWriter<T> {
+    private events:T[] = [];
+    private readEvents:T[] = [];
+    private bindReaderSystem:Set<SystemPack> = new Set();
+    constructor(private world:World){}
+    Read(): T[] {
+        return this.readEvents;
+    }
+
+    Peek(): T {
+        return this.readEvents[0];
+    }
+
+    get RdEmpty(): boolean {
+        return this.readEvents.length === 0;
+    }
+
+    BindReadSystem(system:SystemPack){
+        this.bindReaderSystem.add(system);
+    }
+
+    UnBindReadSystem(system:SystemPack){
+        this.bindReaderSystem.delete(system);
+    }
+
+    get RdLength(){
+        return this.readEvents.length;
+    }
+
+    Write(event: T): void {
+        this.events.push(event);
+        this.world.DirtyEvent(this);
+    }
+
+    //将写入的事件转移到读取事件中，同时清空写入事件，当存在新事件时会通知绑定的系统
+    Flush(){
+        [this.events, this.readEvents] = [this.readEvents, this.events];
+        this.events.length = 0;
+        if(this.readEvents.length > 0){
+            this.bindReaderSystem.forEach(s=>{
+                s.NeedRefresh = true;
+            });
+        }
+    }
+
+    ClearReadEvents(){
+        this.readEvents.length = 0;
+    }
+}
+
 export class World{
     private _entityIdIndex:number = 0;
     private _startUpSystems:SystemPack[] = [];
@@ -299,7 +332,7 @@ export class World{
     private _entities:Map<number,EntityComponent> = new Map();
     private _resources:Map<Constructor,any> = new Map();
 
-    public events:Map<Constructor,EventWriter<any>> = new Map();
+    public events:Map<Constructor,EventProxy<any>> = new Map();
 
     private _waitEntityQueue:EntityChange[] = [];
     private _waitResourceQueue:ResourceChange[] = [];
@@ -320,7 +353,7 @@ export class World{
     }
 
     RegistEvent(e:Constructor){
-        this.events.set(e, new EventWriter(this));
+        this.events.set(e, new EventProxy(this));
         return this;
     }
 
@@ -420,8 +453,8 @@ export class World{
         return this._resources.has(type);
     }
 
-    public dirtyEvents:Set<EventWriter<any>> = new Set();
-    public DirtyEvent(event?:EventWriter<any>){
+    private dirtyEvents:Set<EventProxy<any>> = new Set();
+    public DirtyEvent(event?:EventProxy<any>){
         event && this.dirtyEvents.add(event);
     }
 
@@ -461,28 +494,20 @@ export class World{
         this.commands.execute(this);
     }
 
+    private needClearEvents:Set<EventProxy<any>> = new Set();
     private UpdateEvents(){
-        this.dirtyEvents.forEach(e=>{
-            this._doSystemUpdate(s=>{
-                s.OnEventChange(e);
-            });
-        });
+        this.dirtyEvents.forEach(e=>e.Flush());
+        [this.dirtyEvents, this.needClearEvents] = [this.needClearEvents, this.dirtyEvents];
+        this.dirtyEvents.clear();
     }
 
     private ClearEvents(){
-        this._waitClearEvents.forEach(e=>{
-            e.Clear();
-            this._doSystemUpdate(s=>{
-                s.ClearEvent(e);
-            });
-        });
+        this.needClearEvents.forEach(e=>e.ClearReadEvents());
+        this.needClearEvents.clear();
     }
 
-    private _waitClearEvents:Set<EventWriter<any>> = new Set();
     UpdatePerFrame(){
         this.UpdateEvents();
-        [this.dirtyEvents, this._waitClearEvents] = [this._waitClearEvents, this.dirtyEvents];
-        this.dirtyEvents.clear();
         this.ExecuteCommands();
         this.UpdateChange();
         this.Update();

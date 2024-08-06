@@ -1,4 +1,4 @@
-import {World, IPlugin, SystemType, query, system, Commands, EventWriter, EventReader, Resource, EntityComponent, BindWithOriginal } from "./index"
+import {World, IPlugin, SystemType, query, system, Commands, IEventWriter, IEventReader, Resource, EntityComponent, BindWithOriginal } from "./index"
 const {CommandQuery, EntityQuery, EventWriterQuery, ResourceQuery, EventReaderQuery, WorldQuery} = query;
 
 class ComponentA{}
@@ -42,7 +42,7 @@ class TestPlugin implements IPlugin{
     }
 
     @system(CommandQuery, EventWriterQuery(EventA))
-    static StartUpSystem(commands:Commands, eventWriter:EventWriter<EventA>){
+    static StartUpSystem(commands:Commands, eventWriter:IEventWriter<EventA>){
         commands.spawn(new ComponentA(), new ComponentC());
         commands.resource(new ResourceA("hahaha"))
     }
@@ -56,13 +56,14 @@ class TestPlugin implements IPlugin{
     }
 
     @system(EventWriterQuery(EventA), WorldQuery)
-    static TestEventSystem(eventReader:EventWriter<EventA>, world:World){
+    static TestEventSystem(eventReader:IEventWriter<EventA>, world:World){
         eventReader.Write(new EventA(world.Frame));  
     }
 
     @system(EventReaderQuery(EventA), CommandQuery, EntityQuery(ComponentA), EventWriterQuery(DespawnEvent))
-    static TestEventSystem2(eventReader:EventReader<EventA>, commands:Commands, entities:EntityComponent[], eventWriter:EventWriter<DespawnEvent>){
-        const event = eventReader.Events[0]?.v ?? 0;
+    static TestEventSystem2(eventReader:IEventReader<EventA>, commands:Commands, entities:EntityComponent[], eventWriter:IEventWriter<DespawnEvent>){
+        const events = eventReader.Read();
+        const event = events[0]?.v ?? 0;
         console.log(event);
         commands.resource(new ResourceA(event.toString()));
         if(event >= 100){
@@ -74,8 +75,8 @@ class TestPlugin implements IPlugin{
     }
 
     @system(EventReaderQuery(DespawnEvent))
-    static DespawnSystem(eventReader:EventReader<DespawnEvent>){
-        const events = eventReader.Events;
+    static DespawnSystem(eventReader:IEventReader<DespawnEvent>){
+        const events = eventReader.Read();
         events.forEach(event=>{
             console.log("Despawn", event.entity.entityID);
         });

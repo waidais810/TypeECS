@@ -13,7 +13,7 @@ export {IPlugin} from './Plugin'
 
 export * from './EntityComponent'
 
-export {EventWriter, EventReader} from './Event'
+export {IEventWriter, IEventReader} from './Event'
 
 export {SystemType} from './Types'
 
