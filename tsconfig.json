@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist",        // 编译后的文件将放在dist目录中
+    "rootDir": "./src",        // 源代码所在的根目录
+    "target": "ES2016",           // 目标编译版本
+    "module": "commonjs",      // 使用CommonJS模块规范
+    "strict": true,            // 启用所有严格类型检查选项
+    "esModuleInterop": true,   // 允许默认导入非ES模块
+    "skipLibCheck": true,      // 跳过库文件的类型检查
+    "sourceMap": true,         // 生成sourceMap文件
+    "forceConsistentCasingInFileNames": true // 强制文件名大小写一致
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
