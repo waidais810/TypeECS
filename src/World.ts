@@ -20,10 +20,10 @@ class EntityQueryPack implements IQueryResult {
     public entities:EntityComponent[] = [];
     constructor(private query:EntityQueryProxy){}
     private CheckEntity(entity:EntityComponent){
-        if(!entity.hasAll(...this.query.querys)){
+        if(!entity.HasAll(...this.query.querys)){
             return false;
         }
-        if(this.query.without.length > 0 && entity.hasAll(...this.query.without)){
+        if(this.query.without.length > 0 && entity.HasAll(...this.query.without)){
             return false;
         }
         return true;
@@ -151,7 +151,7 @@ class EventWriterPack implements IQueryResult {
 class SystemPack {
     private queryPacks:IQueryResult[] = [];
     private entityPack:EntityQueryPack[] = [];
-    private resourcePack:ResourceQueryPack[] = [];
+    private resourcePack:Map<Constructor, ResourceQueryPack> = new Map();
     private args:any[] = [];
     private IsValid:boolean = false;
     public NeedRefresh:boolean = true;
@@ -165,7 +165,7 @@ class SystemPack {
             else if(query instanceof ResourceQueryInfo) {
                 const pack = new ResourceQueryPack(query.resource, query.IsNullable, this.world);
                 this.queryPacks.push(pack);
-                this.resourcePack.push(pack);
+                this.resourcePack.set(query.resource, pack);
             }
             else if(query instanceof EventWriterQueryInfo){
                 const pack = new EventWriterPack(query, this.world);
@@ -231,13 +231,9 @@ class SystemPack {
             this.NeedRefresh = true;
     }
 
-    public OnResourceChange(){
-        let changed = false;
-        this.resourcePack.forEach(pack=>{
-            if(pack.OnResourceChange())
-                changed = true;
-        });
-        if(changed)
+    public OnResourceChange(type:Constructor){
+        let pack = this.resourcePack.get(type);
+        if(pack?.OnResourceChange())
             this.NeedRefresh = true;
     }
 
@@ -417,15 +413,15 @@ export class World{
                     this._doSystemUpdate(system=>{
                         system.RemoveEntity(change.entity);
                     });
-                    change.entity.destroy();
+                    change.entity.Destroy();
                     break;
                 case ChangeType.Change:
                     switch(change.extra?.type){
                         case ChangeType.Add:
-                            change.entity.set(change.extra.component);
+                            change.entity.Set(change.extra.component);
                             break;
                         case ChangeType.Remove:
-                            change.entity.remove(change.extra.component);
+                            change.entity.Remove(change.extra.component);
                             break;
                     }
                     this._doSystemUpdate(system=>{
@@ -446,11 +442,11 @@ export class World{
                     break;
             }
         });
-        if(this._waitResourceQueue.length > 0){
+        this._waitResourceQueue.forEach(resourceChange=>{
             this._doSystemUpdate(system=>{
-                system.OnResourceChange();
+                system.OnResourceChange(resourceChange.resource.constructor);
             });
-        }
+        })
         this._waitResourceQueue.length = 0;
     }
 

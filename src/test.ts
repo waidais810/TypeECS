@@ -1,4 +1,4 @@
-import {World, IPlugin, SystemType, query, system, Commands, IEventWriter, IEventReader, Resource, EntityComponent, BindWithOriginal } from "./index"
+import {World, IPlugin, SystemType, query, system, Commands, IEventWriter, IEventReader, EntityComponent } from "./index"
 const {CommandQuery, EntityQuery, EventWriterQuery, ResourceQuery, EventReaderQuery, WorldQuery} = query;
 
 class Position {
@@ -48,7 +48,7 @@ class GamePlugin implements IPlugin {
     @system(EntityQuery(Position, Velocity))
     static MovementSystem(entities: EntityComponent[]) {
         entities.forEach(entity => {
-            const [position, velocity] = entity.gets(Position, Velocity);
+            const [position, velocity] = entity.Gets(Position, Velocity);
             if(position && velocity) {
                 position.x += velocity.dx;
                 position.y += velocity.dy;
@@ -60,8 +60,8 @@ class GamePlugin implements IPlugin {
     static CollisionSystem(entities: EntityComponent[], eventWriter: IEventWriter<CollisionEvent>) {
         for (let i = 0; i < entities.length; i++) {
             for (let j = i + 1; j < entities.length; j++) {
-                const [posA, colA] = entities[i].gets(Position, Collider);
-                const [posB, colB] = entities[j].gets(Position, Collider);
+                const [posA, colA] = entities[i].Gets(Position, Collider);
+                const [posB, colB] = entities[j].Gets(Position, Collider);
                 if(posA && posB && colA && colB) {
                     const dx = posA.x - posB.x;
                     const dy = posA.y - posB.y;
@@ -83,12 +83,12 @@ class GamePlugin implements IPlugin {
         }
     }
 
-    @system(EntityQuery(Position, Renderable))
-    static RenderSystem(entities: EntityComponent[]) {
+    @system(EntityQuery(Position, Renderable), ResourceQuery(GameConfig))
+    static RenderSystem(entities: EntityComponent[], gameConfig:GameConfig) {
         entities.forEach(entity => {
-            const [position, renderable] = entity.gets(Position, Renderable);
+            const [position, renderable] = entity.Gets(Position, Renderable);
             if(position && renderable)
-                console.log(`Rendering ${renderable.sprite} at (${position.x}, ${position.y})`);
+                console.log(`Rendering ${renderable.sprite} at (${position.x}, ${position.y}) in a ${gameConfig.width}x${gameConfig.height} window`);
         });
     }
 }

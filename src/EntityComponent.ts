@@ -8,19 +8,19 @@ export class EntityComponent {
         return this._isVaild;
     }
 
-    destroy() {
+    Destroy() {
         this._isVaild = false;
     }
 
     constructor(public entityID: number, components?:any[]) {
-        components?.forEach(component => this.set(component));
+        components?.forEach(component => this.Set(component));
     }
     
-    get<T>(query: new () => T): T {
+    Get<T>(query: new () => T): T {
         return this.map.get(query);
     }
     
-    set(value: any): void {
+    Set(value: any): void {
         // 获取value的构造函数
         const constructor = value.constructor;
         if (!constructor) {
@@ -29,19 +29,19 @@ export class EntityComponent {
         this.map.set(constructor, value);
     }
 
-    remove(query: any): void {
+    Remove(query: any): void {
         this.map.delete(query.constructor);
     }
 
-    gets<T extends Constructor[]>(...ctors:T): { [K in keyof T]: T[K] extends Constructor<infer U> ? U|undefined : never } {
-        return ctors.map(ctor => this.get(ctor)) as any;
+    Gets<T extends Constructor[]>(...ctors:T): { [K in keyof T]: T[K] extends Constructor<infer U> ? U|undefined : never } {
+        return ctors.map(ctor => this.Get(ctor)) as any;
     }
 
-    has<T>(query: new () => T): boolean {
+    Has<T>(query: new () => T): boolean {
         return this.map.has(query);
     }
 
-    hasAll<T extends Constructor[]>(...ctors:T): boolean {
+    HasAll<T extends Constructor[]>(...ctors:T): boolean {
         return ctors.every(ctor => this.map.has(ctor));
     }
 }

@@ -17,8 +17,6 @@ export {IEventWriter, IEventReader} from './Event'
 
 export {SystemType} from './Types'
 
-export {Resource} from './Resource'
-
 export const query = {
     WorldQuery,
     ResourceQuery,

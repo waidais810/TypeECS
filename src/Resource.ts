@@ -12,7 +12,3 @@ export class ResourceQueryInfo implements IQuery {
 export function ResourceQuery(query: Constructor) {
     return new ResourceQueryInfo(query);
 }
-
-export class Resource<T> {
-    public constructor(public obj:T){}
-}
