@@ -9,11 +9,11 @@ export {Commands} from './Commands';
 
 export { World } from './World';
 
-export {IPlugin} from './Plugin'
+export type {IPlugin} from './Plugin'
 
 export * from './EntityComponent'
 
-export {IEventWriter, IEventReader} from './Event'
+export type {IEventWriter, IEventReader} from './Event'
 
 export {SystemType} from './Types'
 
