@@ -10,15 +10,20 @@ import { BoundFunction } from "./TypeExport";
 import { Constructor, SystemType } from "./Types";
 
 interface IQueryResult {
-    get value(): any;
+    get Value(): any;
     get IsValid(): boolean;
+    Update?():boolean;
 }
 
 type System = BoundFunction;
 
 class EntityQueryPack implements IQueryResult {
     public entities:EntityComponent[] = [];
-    constructor(private query:EntityQueryProxy){}
+    private _filterResults?:EntityComponent[];
+    constructor(private query:EntityQueryProxy){
+        if(query.EnableFilter)
+            this._filterResults = [];
+    }
     private CheckEntity(entity:EntityComponent){
         if(!entity.HasAll(...this.query.querys)){
             return false;
@@ -28,6 +33,7 @@ class EntityQueryPack implements IQueryResult {
         }
         return true;
     }
+
     NewEntity(entityId:EntityComponent):boolean{
         if(this.CheckEntity(entityId)){
             this.entities.push(entityId);
@@ -35,6 +41,7 @@ class EntityQueryPack implements IQueryResult {
         }
         return false;
     }
+
     RemoveEntity(entity:EntityComponent):boolean{
         const index = this.entities.indexOf(entity);
         if(index !== -1){
@@ -43,6 +50,7 @@ class EntityQueryPack implements IQueryResult {
         }
         return false;
     }
+
     OnEntityChange(entity:EntityComponent):boolean{
         const index = this.entities.indexOf(entity);
         if(index !== -1){
@@ -59,12 +67,30 @@ class EntityQueryPack implements IQueryResult {
         return false;
     }
 
-    get value(){
-        return this.entities;
+    Update(): boolean {
+        if(this._filterResults == undefined)
+            return false;
+        let changed = false;
+        this._filterResults.length = 0;
+        for(const entity of this.entities){
+            if(this.query.filters.every(f=>f(entity))){
+                this._filterResults.push(entity);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private get Result(){
+        return this._filterResults ?? this.entities;
+    }
+
+    get Value(){
+        return this.Result;
     }
 
     get IsValid(){
-        return this.entities.length > 0;
+        return this.Result.length > 0;
     }
 }
 
@@ -81,7 +107,7 @@ class ResourceQueryPack implements IQueryResult {
         return false;
     }
 
-    get value(){
+    get Value(){
         return this.resource;
     }
 
@@ -92,7 +118,7 @@ class ResourceQueryPack implements IQueryResult {
 
 class WorldPack implements IQueryResult {
     public constructor(private world:World){}
-    get value(): World {
+    get Value(): World {
         return this.world;
     }
     get IsValid(): boolean {
@@ -102,7 +128,7 @@ class WorldPack implements IQueryResult {
 
 class CommandPack implements IQueryResult {
     public constructor(private world:World){}
-    get value(): Commands {
+    get Value(): Commands {
         return this.world.commands;
     }
     get IsValid(): boolean {
@@ -123,7 +149,7 @@ class EventReaderPack implements IQueryResult {
         return true;
     }
 
-    get value() {
+    get Value() {
         return this.eventProxy;
     }
     
@@ -140,7 +166,7 @@ class EventWriterPack implements IQueryResult {
             throw new Error('EventWriter not found');
         this.eventProxy = proxy;
     }
-    get value(): any {
+    get Value(): any {
         return this.eventProxy;
     }
     get IsValid(): boolean {
@@ -154,35 +180,44 @@ class SystemPack {
     private resourcePack:Map<Constructor, ResourceQueryPack> = new Map();
     private args:any[] = [];
     private IsValid:boolean = false;
+    private _updateQuerys?:IQueryResult[];
+
+    private get UpdateQuerys():IQueryResult[]{
+        if(this._updateQuerys == undefined)
+            this._updateQuerys = [];
+        return this._updateQuerys;
+    }
+
     public NeedRefresh:boolean = true;
     public constructor (private system:System, queries:IQuery[], private world:World){
         for(const query of queries){
+            let pack: IQueryResult|undefined;
             if(query instanceof EntityQueryProxy){
-                const pack = new EntityQueryPack(query);
-                this.queryPacks.push(pack);
-                this.entityPack.push(pack);
+                pack = new EntityQueryPack(query);
+                this.entityPack.push(pack as EntityQueryPack);
             }
             else if(query instanceof ResourceQueryInfo) {
-                const pack = new ResourceQueryPack(query.resource, query.IsNullable, this.world);
-                this.queryPacks.push(pack);
-                this.resourcePack.set(query.resource, pack);
+                pack = new ResourceQueryPack(query.resource, query.IsNullable, this.world);
+                this.resourcePack.set(query.resource, pack as ResourceQueryPack);
             }
             else if(query instanceof EventWriterQueryInfo){
-                const pack = new EventWriterPack(query, this.world);
-                this.queryPacks.push(pack);
+                pack = new EventWriterPack(query, this.world);
             }
             else if(query instanceof EventReaderQueryInfo){
-                const pack = new EventReaderPack(query, this.world);
-                pack.eventProxy.BindReadSystem(this);
-                this.queryPacks.push(pack);
+                pack = new EventReaderPack(query, this.world);
+                (pack as EventReaderPack).eventProxy.BindReadSystem(this);
             }
             else if(query === CommandQuery){
-                const pack = new CommandPack(this.world);
-                this.queryPacks.push(pack);
+                pack = new CommandPack(this.world);
             }
             else if(query === WorldQuery){
-                const pack = new WorldPack(this.world);
+                pack = new WorldPack(this.world);
+            }
+            if(pack){
                 this.queryPacks.push(pack);
+                if(pack.Update){
+                    this.UpdateQuerys.push(pack);
+                }
             }
         }
     }
@@ -191,7 +226,7 @@ class SystemPack {
         this.args.length = 0;
         for(const pack of this.queryPacks){
             if(pack.IsValid){
-                this.args.push(pack.value);
+                this.args.push(pack.Value);
             }else{
                 this.IsValid = false;
                 this.args.length = 0;
@@ -237,7 +272,14 @@ class SystemPack {
             this.NeedRefresh = true;
     }
 
+    private UpdateSystems(){
+        this._updateQuerys?.forEach(q=>{
+            this.NeedRefresh = q.Update?.() || this.NeedRefresh;
+        })
+    };
+
     public Execute(){
+        this.UpdateSystems();
         if(this.NeedRefresh){
             this.RefreshArgs();
             this.NeedRefresh = false;

@@ -16,7 +16,7 @@ export class EntityComponent {
         components?.forEach(component => this.Set(component));
     }
     
-    Get<T>(query: new () => T): T {
+    Get<T>(query: Constructor<T>): T|undefined {
         return this.map.get(query);
     }
     

@@ -45,7 +45,7 @@ class GamePlugin implements IPlugin {
         commands.resource(new Score(0));
     }
 
-    @system(EntityQuery(Position, Velocity))
+    @system(EntityQuery(Position, Velocity).Filter(entity=>{const posx = entity.Get(Position)?.x; return posx == undefined || posx != 50 }))
     static MovementSystem(entities: EntityComponent[]) {
         entities.forEach(entity => {
             const [position, velocity] = entity.Gets(Position, Velocity);

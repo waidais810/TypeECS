@@ -6,7 +6,7 @@ export class EventWriterQueryInfo implements IQuery {
 }
 
 export function EventWriterQuery(query: Constructor) {
-    return new EventWriterQueryInfo(query);
+    return new EventWriterQueryInfo(query) as IQuery;
 }
 
 export interface IEventWriter<T> {
@@ -18,12 +18,12 @@ export class EventReaderQueryInfo implements IQuery {
 }
 
 export interface IEventReader<T> {
-    Read():T[];
+    Read():ReadonlyArray<T>;
     Peek():T|undefined;
     get RdLength():number;
     get RdEmpty():boolean;
 }
 
 export function EventReaderQuery(query: Constructor) {
-    return new EventReaderQueryInfo(query);
+    return new EventReaderQueryInfo(query) as IQuery;
 }
