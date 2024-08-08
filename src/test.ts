@@ -45,7 +45,7 @@ class GamePlugin implements IPlugin {
         commands.resource(new Score(0));
     }
 
-    @system(EntityQuery(Position, Velocity).Filter(entity=>{const posx = entity.Get(Position)?.x; return posx == undefined || posx != 50 }))
+    @system(EntityQuery(Position, Velocity).Filter(entity=>{const posx = entity.Get(Position)?.x; return posx == undefined || posx < 100 }))
     static MovementSystem(entities: EntityComponent[]) {
         entities.forEach(entity => {
             const [position, velocity] = entity.Gets(Position, Velocity);
@@ -98,6 +98,8 @@ class GamePlugin implements IPlugin {
 const world = new World(new GamePlugin());
 world.StartUp();
 while(true){
-    world.UpdatePerFrame();
+    world.BeginFrame();
+    world.Update();
+    world.LateUpdate();
+    world.EndFrame();
 }
-

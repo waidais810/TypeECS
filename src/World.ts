@@ -553,22 +553,23 @@ export class World{
         this.needClearEvents.clear();
     }
 
-    UpdatePerFrame(){
+    public BeginFrame(){
         this.UpdateEvents();
         this.ExecuteCommands();
         this.UpdateChange();
-        this.Update();
-        this.LateUpdate();
+    }
+
+    public EndFrame(){
         this.ClearEvents();
     }
 
-    private Update(){
+    public Update(){
         this._updateSystems.forEach(system=>{
             system.Execute();
         });
     }
 
-    private LateUpdate(){
+    public LateUpdate(){
         this.frame++;
         this._lateUpdateSystems.forEach(system=>{
             system.Execute();
